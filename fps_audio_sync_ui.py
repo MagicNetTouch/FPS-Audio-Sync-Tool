@@ -155,7 +155,7 @@ def run_ffmpeg_with_progress(cmd, total_duration, description):
 
 # ================= AUDIO PROCESS =================
 def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
-                  lang, mux_video, delay_ms, stretch_duration, set_default_track=False):
+                  lang, mux_video, delay_ms, stretch_duration, fast_mode, set_default_track=False):
 
     log("Analyzing FPS and duration…")
     fps_src = get_fps(src_video)
@@ -174,106 +174,93 @@ def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
         stretch_ratio = fps_tgt / fps_src
         log(f"Stretching audio based on FPS ratio: {stretch_ratio:.8f}")
 
-    # Apply delay exactly as entered (no scaling)
+    # Apply delay
     scaled_delay_ms = int(delay_ms)
     log(f"Applying delay: {scaled_delay_ms} ms")
 
-    # Calculate total steps for progress reporting
-    total_steps = 1  # 1. Extract audio (always)
-
-    use_stretch = abs(stretch_ratio - 1.0) > 1e-6
-    if use_stretch:
-        total_steps += 1  # 2. Stretch audio
-
-    if scaled_delay_ms > 0:
-        total_steps += 2  # 3. Generate silence, 4. Concatenate
+    # Build filter complex
+    filters = []
+    
+    # 1. Stretching
+    if fast_mode:
+        # Fast mode: Use asetrate (resampling) which changes pitch
+        # Logic: Play at (sample_rate * ratio), then resample back to sample_rate
+        new_rate = int(sample_rate * stretch_ratio)
+        log(f"Fast Mode (Pitch Shift): Setting input rate to {new_rate}Hz, then resampling to {sample_rate}Hz")
+        filters.append(f"asetrate={new_rate}")
+        filters.append(f"aresample={sample_rate}")
     else:
-        total_steps += 1  # 3. Encode audio (no delay or negative trimming)
+        # Normal mode: Use atempo (time-stretch, pitch preserved)
+        # atempo filter is limited to [0.5, 2.0], so we chain if needed
+        frames_ratio = stretch_ratio
+        while frames_ratio > 2.0:
+            filters.append("atempo=2.0")
+            frames_ratio /= 2.0
+        while frames_ratio < 0.5:
+            filters.append("atempo=0.5")
+            frames_ratio /= 0.5
+        
+        if abs(frames_ratio - 1.0) > 1e-6:
+            filters.append(f"atempo={frames_ratio:.8f}")
 
-    if mux_video:
-        total_steps += 1  # 5. Mux video
+    # 2. Delay (adelay) or Trim (atrim)
+    if scaled_delay_ms > 0:
+        # positive delay: insert silence at start
+        # adelay syntax: delays in ms. 'all=1' applies to all channels
+        filters.append(f"adelay={scaled_delay_ms}:all=1")
+    elif scaled_delay_ms < 0:
+        # negative delay: trim start
+        trim_sec = abs(scaled_delay_ms) / 1000.0
+        filters.append(f"atrim=start={trim_sec}")
+        filters.append("asetpts=PTS-STARTPTS")
 
-    current_step = 0
+    # Construct filter string
+    filter_str = ",".join(filters) if filters else "anull"
+    
+    log(f"Generated FFmpeg Filter Complex: {filter_str}")
 
     base = os.path.splitext(os.path.basename(src_video))[0]
-    temp_wav = os.path.join(os.path.dirname(src_video), "__temp_audio.wav")
-    stretched_wav = os.path.join(os.path.dirname(src_video), "__stretched.wav")
-
+    ext = "mp3" if audio_format == "mp3" else "aac"
+    final_audio = os.path.join(os.path.dirname(src_video), f"{base}_audio.{ext}")
     
-    # Step 1: Extract audio to WAV
-    current_step += 1
-    run_ffmpeg_with_progress([FFMPEG, "-y", "-i", src_video, "-vn", "-acodec", "pcm_s16le",
-                    "-ar", str(sample_rate), temp_wav], duration_src, f"Step {current_step}/{total_steps}: Extracting audio")
+    # Determine encoder
+    codec = "libmp3lame" if audio_format == "mp3" else "aac"
 
-    if use_stretch:
-        atempo_filters = []
-        ratio = stretch_ratio
-        while ratio > 2.0:
-            atempo_filters.append("atempo=2.0")
-            ratio /= 2.0
-        while ratio < 0.5:
-            atempo_filters.append("atempo=0.5")
-            ratio /= 0.5
-        atempo_filters.append(f"atempo={ratio:.8f}")
-        filter_str = ",".join(atempo_filters)
+    # Step 1: Single Pass Encoding
+    total_steps = 2 if mux_video else 1
+    current_step = 1
 
-        log(f"Stretching audio WAV… Filter: {filter_str}")
-        current_step += 1
-        run_ffmpeg_with_progress([FFMPEG, "-y", "-i", temp_wav, "-filter:a", filter_str,
-                        "-c:a", "pcm_s16le", stretched_wav], duration_tgt, f"Step {current_step}/{total_steps}: Stretching audio")
-        os.remove(temp_wav)
-    else:
-        log("Stretch ratio is 1.0, skipping stretching step.")
-        stretched_wav = temp_wav
+    cmd = [
+        FFMPEG, "-y",
+        "-i", src_video,
+        "-vn", # No video
+        "-filter:a", filter_str,
+        "-c:a", codec,
+        "-b:a", bitrate,
+        "-ar", str(sample_rate),
+        "-threads", "0",          # Enable multi-threading for encoding
+        "-filter_threads", "8",   # Enable multi-threading for filters
+        "-filter_complex_threads", "8", # Enable multi-threading for complex filters
+        final_audio
+    ]
 
-    # Step 3: Apply Delay (Positive = Silence, Negative = Trim)
-    final_audio = os.path.join(os.path.dirname(src_video), f"{base}_audio.aac")
-    if scaled_delay_ms > 0:
-        silence_sec = scaled_delay_ms / 1000.0
-        temp_silence = os.path.join(os.path.dirname(src_video), "__silence.wav")
-        current_step += 1
-        run_ffmpeg_with_progress([FFMPEG, "-y", "-f", "lavfi", "-i", f"anullsrc=r={sample_rate}:cl=stereo",
-                        "-t", f"{silence_sec}", "-c:a", "pcm_s16le", temp_silence], silence_sec, f"Step {current_step}/{total_steps}: Generating silence")
+    log("Starting single-pass audio encoding (Extract + Stretch + Delay + Encode)...")
+    
+    # Estimate output duration for progress
+    expected_duration = duration_tgt
+    if scaled_delay_ms < 0:
+        expected_duration = max(0.0, duration_tgt - (abs(scaled_delay_ms)/1000.0))
+    elif scaled_delay_ms > 0:
+        expected_duration = duration_tgt + (scaled_delay_ms/1000.0)
 
-        # Concatenate silence + stretched audio
-        concat_list = os.path.join(os.path.dirname(src_video), "__concat.txt")
-        with open(concat_list, "w") as f:
-            f.write(f"file '{temp_silence}'\n")
-            f.write(f"file '{stretched_wav}'\n")
-
-        log("Prepending silence for delay…")
-        # Total duration is silence + (stretched duration which is approx duration_tgt)
-        total_len = silence_sec + duration_tgt
-        current_step += 1
-        run_ffmpeg_with_progress([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", concat_list,
-                        "-c:a", "aac", "-b:a", bitrate, "-ar", str(sample_rate), final_audio], total_len, f"Step {current_step}/{total_steps}: Concatenating audio")
-        os.remove(temp_silence)
-        os.remove(concat_list)
-        os.remove(stretched_wav)
-    elif scaled_delay_ms < 0:
-        trim_sec = abs(scaled_delay_ms) / 1000.0
-        log(f"Negative delay detected. Trimming start of audio by {trim_sec} seconds…")
-        current_step += 1
-        
-        # Calculate expected output duration
-        # If we trim more than duration, we get empty or error, but let's assume valid trim
-        out_duration = max(0.0, duration_tgt - trim_sec)
-        
-        run_ffmpeg_with_progress([FFMPEG, "-y", "-ss", str(trim_sec), "-i", stretched_wav, "-c:a", "aac",
-                        "-b:a", bitrate, "-ar", str(sample_rate), final_audio], out_duration, f"Step {current_step}/{total_steps}: Encoding (trimmed) audio")
-        os.remove(stretched_wav)
-    else:
-        log("No delay, encoding stretched audio to AAC…")
-        current_step += 1
-        run_ffmpeg_with_progress([FFMPEG, "-y", "-i", stretched_wav, "-c:a", "aac",
-                        "-b:a", bitrate, "-ar", str(sample_rate), final_audio], duration_tgt, f"Step {current_step}/{total_steps}: Encoding audio")
-        os.remove(stretched_wav)
-
+    run_ffmpeg_with_progress(cmd, expected_duration, f"Step {current_step}/{total_steps}: Encoding Audio")
+    
     log(f"Audio processed: {final_audio}")
 
-    # Step 4: Mux audio into target video (KEEP original audio tracks + languages)
+    # Step 2: Mux (optional)
     out_video = None
     if mux_video:
+        current_step += 1
         ext = os.path.splitext(tgt_video)[1]
         out_video = os.path.join(
             os.path.dirname(tgt_video),
@@ -288,51 +275,36 @@ def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
         if not lang_code:
             lang_code = "und"
 
-        log(f"Original audio tracks: {existing_audio_count}")
-        log(f"New audio stream index will be: a:{new_audio_index}")
         log(f"Muxing audio into target video as language={lang_name} ({lang_code}) (original audio untouched)…")
 
-        cmd = [
+        cmd_mux = [
             FFMPEG, "-y",
             "-i", tgt_video,
             "-i", final_audio,
 
-            # Map video
             "-map", "0:v",
-
-            # Map ALL original audio tracks
             "-map", "0:a?",
-
-            # Map NEW audio
             "-map", "1:a",
 
-            # Copy everything
             "-c:v", "copy",
             "-c:a", "copy",
 
-            # Apply language and title ONLY to the new audio stream
             f"-metadata:s:a:{new_audio_index}", f"language={lang_code}",
             f"-metadata:s:a:{new_audio_index}", f"title={lang_name}",
 
             out_video
         ]
 
-        # Insert disposition logic before output file
-        # If "Set as Default" is checked, remove default from all previous audio tracks
-        # and set default on the new one.
         if set_default_track:
-            log("Setting new audio track as DEFAULT (clearing default flag on original tracks)")
-            # Clear default from all original audio streams
+            log("Setting new audio track as DEFAULT")
             for i in range(existing_audio_count):
-                cmd.insert(-1, f"-disposition:a:{i}")
-                cmd.insert(-1, "0")
+                cmd_mux.insert(-1, f"-disposition:a:{i}")
+                cmd_mux.insert(-1, "0")
             
-            # Set default on the new audio stream
-            cmd.insert(-1, f"-disposition:a:{new_audio_index}")
-            cmd.insert(-1, "default")
+            cmd_mux.insert(-1, f"-disposition:a:{new_audio_index}")
+            cmd_mux.insert(-1, "default")
 
-        current_step += 1
-        run_ffmpeg_with_progress(cmd, duration_tgt, f"Step {current_step}/{total_steps}: Muxing video")
+        run_ffmpeg_with_progress(cmd_mux, duration_tgt, f"Step {current_step}/{total_steps}: Muxing video")
         log(f"Output video with added audio: {out_video}")
 
     return final_audio, out_video
@@ -355,6 +327,7 @@ def start_processing():
     mux_video = mux_var.get()
     delay_ms = int(audio_delay_var.get())
     stretch_duration = stretch_duration_var.get()
+    fast_mode = fast_mode_var.get()
     set_default = set_default_var.get()
 
     def worker():
@@ -362,7 +335,7 @@ def start_processing():
             out_audio, out_video = process_audio(
                 vid1_var.get(), vid2_var.get(),
                 audio_format, bitrate, sample_rate, lang, mux_video,
-                delay_ms, stretch_duration, set_default
+                delay_ms, stretch_duration, fast_mode, set_default
             )
             messagebox.showinfo("Done",
                                 f"Audio created:\n{out_audio}" +
@@ -483,9 +456,18 @@ tk.Checkbutton(mux_frame, text="Set as Default", variable=set_default_var).pack(
 tk.Label(root, text="Audio Delay (ms)").grid(row=6, column=0, sticky="w", padx=5, pady=2)
 tk.Entry(root, textvariable=audio_delay_var).grid(row=6, column=1, sticky="w", padx=2)
 
+# Stretch options frame
+stretch_frame = tk.Frame(root)
+stretch_frame.grid(row=6, column=2, sticky="w", padx=5)
+
 # Stretch duration checkbox
-tk.Checkbutton(root, text="Stretch audio to match exact duration instead of FPS ratio",
-               variable=stretch_duration_var).grid(row=6, column=2, sticky="w", padx=5)
+tk.Checkbutton(stretch_frame, text="Stretch to exact duration",
+               variable=stretch_duration_var).pack(side="left")
+
+# Fast mode checkbox
+fast_mode_var = tk.BooleanVar(value=False)
+tk.Checkbutton(stretch_frame, text="Fast Mode (Pitch Shift)",
+               variable=fast_mode_var).pack(side="left", padx=5)
 
 # Drag & drop area
 drop = tk.Label(root, text="Drag & drop two videos here", relief="groove", height=3)
