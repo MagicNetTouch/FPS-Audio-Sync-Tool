@@ -1,4 +1,4 @@
-import os, sys, json, threading, subprocess, re
+import os, sys, json, threading, subprocess, re, time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from tkinterdnd2 import TkinterDnD, DND_FILES # type: ignore
@@ -96,13 +96,15 @@ def get_audio_stream_count(video_path):
     data = json.loads(r.stdout)
     return len(data.get("streams", []))
 
-def update_progress(val, text):
+def update_progress(val, text, extra=""):
     progress_var.set(val)
-    status_var.set(f"{text}: {val:.1f}%")
+    status_var.set(f"{text}: {val:.1f}% {extra}".strip())
 
 def run_ffmpeg_with_progress(cmd, total_duration, description):
     log(f"{description}...")
     root.after(0, lambda: update_progress(0, description))
+
+    start_time = time.time()
 
     startupinfo = None
     if os.name == 'nt':
@@ -145,7 +147,15 @@ def run_ffmpeg_with_progress(cmd, total_duration, description):
                 h, m, s, ms = map(int, match.groups())
                 current = h * 3600 + m * 60 + s + ms / 100.0
                 percent = min(100, (current / total_duration) * 100)
-                root.after(0, lambda p=percent, d=description: update_progress(p, d))
+                
+                elapsed = time.time() - start_time
+                if percent > 0:
+                    remaining = elapsed * ((100 - percent) / percent)
+                    extra = f"- Elapsed: {format_duration(elapsed)} Remaining: {format_duration(remaining)}"
+                else:
+                    extra = f"- Elapsed: {format_duration(elapsed)}"
+
+                root.after(0, lambda p=percent, d=description, e=extra: update_progress(p, d, e))
 
     if process.returncode != 0:
         err_msg = "".join(stderr_lines)
