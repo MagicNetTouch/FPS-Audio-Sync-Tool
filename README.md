@@ -3,4 +3,5 @@ Sync audio between different FPS video files and Codecs, preserves original audi
 
 Requires ffmpeg.exe and ffprobe.exe in root folder.
 
-<img width="656" height="589" alt="εικόνα" src="https://github.com/user-attachments/assets/e2bf8cee-157d-46d1-b9e5-492dd7d00915" />
+<img width="653" height="586" alt="εικόνα" src="https://github.com/user-attachments/assets/e76a33c4-7ce7-4dee-ace9-9b08130aa189" />
+
