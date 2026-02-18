@@ -4,7 +4,7 @@ Sync audio between different FPS video files and Codecs, preserves original audi
 Requires ffmpeg.exe and ffprobe.exe in root folder.
 
 <b>v1.9</b></br>
-• Added Sopt Process button.</br>
+• Added Stop Process button.</br>
 • Added Total time elapsed.</br>
 • Added avg_frame_rate for more accurent FPS detection.</br>
 
