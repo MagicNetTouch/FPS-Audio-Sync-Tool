@@ -34,11 +34,28 @@ def format_duration(seconds):
 
 def get_fps(video_path):
     cmd = [FFPROBE, "-v", "error", "-select_streams", "v:0",
-           "-show_entries", "stream=r_frame_rate", "-of", "json", video_path]
+           "-show_entries", "stream=r_frame_rate,avg_frame_rate", "-of", "json", video_path]
     r = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    rate = json.loads(r.stdout)["streams"][0]["r_frame_rate"]
-    num, den = map(int, rate.split("/"))
-    return num / den
+    data = json.loads(r.stdout)["streams"][0]
+    
+    r_rate = data.get("r_frame_rate", "0/0")
+    avg_rate = data.get("avg_frame_rate", "0/0")
+    
+    def parse_rate(rate_str):
+        try:
+            num, den = map(int, rate_str.split("/"))
+            return num / den if den != 0 else 0
+        except:
+            return 0
+            
+    fps_r = parse_rate(r_rate)
+    fps_avg = parse_rate(avg_rate)
+    
+    log(f"FPS Detection - r_frame_rate: {r_rate} ({fps_r:.4f}), avg_frame_rate: {avg_rate} ({fps_avg:.4f})")
+    
+    if fps_avg > 0:
+        return fps_avg
+    return fps_r
 
 def get_duration(video_path):
     cmd = [FFPROBE, "-v", "error", "-show_entries", "format=duration",
@@ -100,6 +117,8 @@ def update_progress(val, text, extra=""):
     progress_var.set(val)
     status_var.set(f"{text}: {val:.1f}% {extra}".strip())
 
+cancel_event = threading.Event()
+
 def run_ffmpeg_with_progress(cmd, total_duration, description):
     log(f"{description}...")
     root.after(0, lambda: update_progress(0, description))
@@ -137,6 +156,10 @@ def run_ffmpeg_with_progress(cmd, total_duration, description):
     pattern = re.compile(r"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})")
 
     while True:
+        if cancel_event.is_set():
+            process.terminate()
+            raise Exception("Process stopped by user")
+
         line = stderr_pipe.readline() # type: ignore
         if not line and process.poll() is not None:
             break
@@ -328,7 +351,8 @@ def start_processing():
     log_box.config(state="normal")
     log_box.delete("1.0", tk.END)
     log_box.config(state="disabled")
-    btn.config(state="disabled")
+    btn_start.config(state="disabled")
+    btn_stop.config(state="normal")
 
     audio_format = audio_format_var.get()
     bitrate = bitrate_var.get()
@@ -341,22 +365,38 @@ def start_processing():
     set_default = set_default_var.get()
 
     def worker():
+        start_time_total = time.time()
+        cancel_event.clear()
         try:
             out_audio, out_video = process_audio(
                 vid1_var.get(), vid2_var.get(),
                 audio_format, bitrate, sample_rate, lang, mux_video,
                 delay_ms, stretch_duration, fast_mode, set_default
             )
+            
+            elapsed_total = time.time() - start_time_total
+            elapsed_str = format_duration(elapsed_total)
+            
             messagebox.showinfo("Done",
+                                f"Process Finished.\nTotal Time: {elapsed_str}\n\n" +
                                 f"Audio created:\n{out_audio}" +
                                 (f"\n\nVideo with audio:\n{out_video}" if out_video else ""))
         except Exception as e:
-            messagebox.showerror("Error", str(e))
-            log(f"ERROR: {e}")
+            if str(e) == "Process stopped by user":
+                log("Process stopped by user.")
+                messagebox.showinfo("Stopped", "Process execution stopped by user.")
+            else:
+                messagebox.showerror("Error", str(e))
+                log(f"ERROR: {e}")
         finally:
-            btn.config(state="normal")
+            btn_start.config(state="normal")
+            btn_stop.config(state="disabled")
 
     threading.Thread(target=worker, daemon=True).start()
+
+def stop_processing():
+    if messagebox.askyesno("Stop", "Are you sure you want to stop the process?"):
+        cancel_event.set()
 
 def on_drop(event):
     files = root.tk.splitlist(event.data)
@@ -485,9 +525,17 @@ drop.grid(row=7, column=0, columnspan=3, sticky="ew", padx=5, pady=4)
 drop.drop_target_register(DND_FILES) # type: ignore
 drop.dnd_bind("<<Drop>>", on_drop) # type: ignore
 
-# Start button
-btn = ttk.Button(root, text="Start Processing", command=start_processing)
-btn.grid(row=8, column=0, columnspan=3, pady=6, sticky="ew", padx=5)
+# Start/Stop buttons
+btn_frame = tk.Frame(root)
+btn_frame.grid(row=8, column=0, columnspan=3, pady=6, sticky="ew", padx=5)
+btn_frame.columnconfigure(0, weight=1)
+btn_frame.columnconfigure(1, weight=1)
+
+btn_start = ttk.Button(btn_frame, text="Start Processing", command=start_processing)
+btn_start.grid(row=0, column=0, sticky="ew", padx=2)
+
+btn_stop = ttk.Button(btn_frame, text="Stop Processing", command=stop_processing, state="disabled")
+btn_stop.grid(row=0, column=1, sticky="ew", padx=2)
 
 # Status and Progress
 tk.Label(root, textvariable=status_var).grid(row=9, column=0, columnspan=3, sticky="w", padx=5)
