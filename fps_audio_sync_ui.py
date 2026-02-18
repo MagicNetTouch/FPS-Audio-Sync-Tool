@@ -377,6 +377,8 @@ def start_processing():
             elapsed_total = time.time() - start_time_total
             elapsed_str = format_duration(elapsed_total)
             
+            log(f"Process Finished. Total Time: {elapsed_str}")
+            
             messagebox.showinfo("Done",
                                 f"Process Finished.\nTotal Time: {elapsed_str}\n\n" +
                                 f"Audio created:\n{out_audio}" +
