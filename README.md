@@ -3,20 +3,19 @@ Sync audio between different FPS video files and Codecs, preserves original audi
 
 Requires ffmpeg.exe and ffprobe.exe in root folder.
 
-1.9
-	Added Sopt Process button
-	Added Total time elapsed
-	Added avg_frame_rate for more accurent FPS detection
+<b>v1.9</b></br>
+• Added Sopt Process button.</br>
+• Added Total time elapsed.</br>
+• Added avg_frame_rate for more accurent FPS detection.</br>
 
-1.8
-	Added Elapsed time and remaning time
+<b>v1.8</b></br>
+• Added Elapsed time and remaning time.</br>
 	
-1.7
-	Optimizing Audio Encoding
-		I have implemented the "Fast Mode" which simply resamples audio instead of time-stretching, offering a significant speed boost at the cost of pitch shift. I also added support for filter multi-threading.
+<b>v1.7</b></br>
+• Optimizing Audio Encoding implemented the "Fast Mode" which simply resamples audio instead of time-stretching, offering a significant speed boost at the cost of pitch shift. I also added support for filter multi-threading.
 		
-1.6
-	I have optimized the audio encoding process. It now uses a single FFmpeg pass with multi-threading, which should significantly improve speed and resource usage. I've also verified the changes and updated the documentation.
+<b>v1.6</b></br>
+• Optimized the audio encoding process. It now uses a single FFmpeg pass with multi-threading, which should significantly improve speed and resource usage.
 
   
 <img width="653" height="586" alt="εικόνα" src="https://github.com/user-attachments/assets/e76a33c4-7ce7-4dee-ace9-9b08130aa189" />
