@@ -188,7 +188,7 @@ def run_ffmpeg_with_progress(cmd, total_duration, description):
 
 # ================= AUDIO PROCESS =================
 def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
-                  lang, mux_video, delay_ms, stretch_duration, fast_mode, set_default_track=False):
+                  lang, mux_video, delay_ms, volume_db, stretch_duration, fast_mode, set_default_track=False):
 
     log("Analyzing FPS and duration…")
     fps_src = get_fps(src_video)
@@ -213,6 +213,15 @@ def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
 
     # Build filter complex
     filters = []
+    
+    # 0. Volume Boost
+    try:
+        vol_db_val = float(volume_db)
+        if abs(vol_db_val) > 0.1:
+            log(f"Applying volume boost: {vol_db_val}dB")
+            filters.append(f"volume={vol_db_val}dB")
+    except ValueError:
+        pass
     
     # 1. Stretching
     if fast_mode:
@@ -253,12 +262,19 @@ def process_audio(src_video, tgt_video, audio_format, bitrate, sample_rate,
     log(f"Generated FFmpeg Filter Complex: {filter_str}")
 
     base = os.path.splitext(os.path.basename(src_video))[0]
-    ext = "mp3" if audio_format == "mp3" else "aac"
+    
+    if audio_format == "mp3":
+        ext = "mp3"
+        codec = "libmp3lame"
+    elif audio_format == "opus":
+        ext = "opus"
+        codec = "libopus"
+    else:
+        ext = "aac"
+        codec = "aac"
+
     final_audio = os.path.join(os.path.dirname(src_video), f"{base}_audio.{ext}")
     
-    # Determine encoder
-    codec = "libmp3lame" if audio_format == "mp3" else "aac"
-
     # Step 1: Single Pass Encoding
     total_steps = 2 if mux_video else 1
     current_step = 1
@@ -360,6 +376,7 @@ def start_processing():
     lang = lang_var.get()
     mux_video = mux_var.get()
     delay_ms = int(audio_delay_var.get())
+    volume_db = volume_boost_var.get()
     stretch_duration = stretch_duration_var.get()
     fast_mode = fast_mode_var.get()
     set_default = set_default_var.get()
@@ -371,7 +388,7 @@ def start_processing():
             out_audio, out_video = process_audio(
                 vid1_var.get(), vid2_var.get(),
                 audio_format, bitrate, sample_rate, lang, mux_video,
-                delay_ms, stretch_duration, fast_mode, set_default
+                delay_ms, volume_db, stretch_duration, fast_mode, set_default
             )
             
             elapsed_total = time.time() - start_time_total
@@ -459,8 +476,9 @@ sample_rate_var = tk.StringVar(value=str(DEFAULT_SAMPLE_RATE))
 lang_var = tk.StringVar(value="Greek (modern, 1453-) (el, gre)")
 mux_var = tk.BooleanVar(value=True)
 audio_delay_var = tk.StringVar(value="0")
+volume_boost_var = tk.StringVar(value="0")
 stretch_duration_var = tk.BooleanVar(value=False)
-set_default_var = tk.BooleanVar(value=False)
+set_default_var = tk.BooleanVar(value=True)
 status_var = tk.StringVar(value="Ready")
 progress_var = tk.DoubleVar(value=0)
 
@@ -482,10 +500,16 @@ tk.Button(target_frame, text="Browse", command=browse_target, width=12).grid(row
 
 # Audio options
 tk.Label(root, text="Audio Format").grid(row=2, column=0, sticky="w", padx=5, pady=2)
-ttk.Combobox(root, textvariable=audio_format_var, values=["mp3", "aac"], state="readonly").grid(row=2, column=1, sticky="w", padx=2)
+ttk.Combobox(root, textvariable=audio_format_var, values=["mp3", "aac", "opus"], state="readonly").grid(row=2, column=1, sticky="w", padx=2)
 
 tk.Label(root, text="Bitrate").grid(row=3, column=0, sticky="w", padx=5, pady=2)
 ttk.Combobox(root, textvariable=bitrate_var, values=["128k","192k","256k","320k"], state="readonly").grid(row=3, column=1, sticky="w", padx=2)
+
+# Volume Boost
+vol_frame = tk.Frame(root)
+vol_frame.grid(row=3, column=2, sticky="w", padx=5)
+tk.Label(vol_frame, text="Vol Boost (dB):").pack(side="left")
+ttk.Combobox(vol_frame, textvariable=volume_boost_var, values=["0", "1", "2", "3", "4", "5", "6", "9", "10", "12", "15", "20"], width=5).pack(side="left", padx=2)
 
 tk.Label(root, text="Sample Rate (Hz)").grid(row=4, column=0, sticky="w", padx=5, pady=2)
 ttk.Combobox(root, textvariable=sample_rate_var, values=["44100","48000"], state="readonly").grid(row=4, column=1, sticky="w", padx=2)
