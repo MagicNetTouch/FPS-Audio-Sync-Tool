@@ -3,6 +3,12 @@ Sync audio between different FPS video files and Codecs, preserves original audi
 
 Requires ffmpeg.exe and ffprobe.exe in root folder.
 
+<b>v2.1</b></br>
+• Added Volume Boost.</br>
+
+<b>v2.0</b></br>
+• Added Opus Audio format.</br>
+
 <b>v1.9</b></br>
 • Added Stop Process button.</br>
 • Added Total time elapsed.</br>
