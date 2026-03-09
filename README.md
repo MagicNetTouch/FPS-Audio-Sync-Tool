@@ -1,8 +1,13 @@
-# FPS-Audio-Sync-Tool v2.1
+# FPS-Audio-Sync-Tool v2.2
 Sync audio between different FPS video files and Codecs, preserves original audio tracks and set new audio as default. 
 
 Requires <b>ffmpeg.exe</b> and <b>ffprobe.exe</b> in root folder.
 
+<b>v2.2</b></br>
+• Added better compatibility on audio track language metadata writing on output video</br>
+• Added option to keep or not original audio tracks</br>
+• Added ability to volume boost source's specific audio track without the need of whole process and target video</br>
+	
 <b>v2.1</b></br>
 • Added Volume Boost.</br>
 
