@@ -32,7 +32,6 @@ Requires <b>ffmpeg.exe</b> and <b>ffprobe.exe</b> in root folder.
 <b>v1.6</b></br>
 • Optimized the audio encoding process. It now uses a single FFmpeg pass with multi-threading, which should significantly improve speed and resource usage.
 
-
-
 You can use this command to compile it to exe file:
 python -m PyInstaller --onefile --windowed --clean --add-binary "ffmpeg.exe;." --add-binary "ffprobe.exe;." --hidden-import=tkinterdnd2 fps_audio_sync_ui.py
+
