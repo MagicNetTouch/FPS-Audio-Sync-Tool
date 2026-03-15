@@ -703,6 +703,136 @@ def browse_target():
             f"Loaded Target Video File: {os.path.basename(file)} / FPS: {fps:.6f} / Duration: {format_duration(duration)} / Codec: {codec}"
         )
 
+def _app_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+DEFAULT_SETTINGS_PATH = os.path.join(_app_dir(), "default_settings.json")
+
+def _bool_value(v):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+def _collect_settings():
+    return {
+        "audio_format": audio_format_var.get(),
+        "bitrate": bitrate_var.get(),
+        "sample_rate": sample_rate_var.get(),
+        "lang": lang_var.get(),
+        "mux": mux_var.get(),
+        "set_default": set_default_var.get(),
+        "keep_original": keep_original_var.get(),
+        "delay_ms": audio_delay_var.get(),
+        "volume_db": volume_boost_var.get(),
+        "stretch_duration": stretch_duration_var.get(),
+        "fast_mode": fast_mode_var.get(),
+    }
+
+def _apply_settings(data):
+    if not isinstance(data, dict):
+        return
+    if "audio_format" in data:
+        audio_format_var.set(str(data["audio_format"]))
+    if "bitrate" in data:
+        bitrate_var.set(str(data["bitrate"]))
+    if "sample_rate" in data:
+        sample_rate_var.set(str(data["sample_rate"]))
+    if "lang" in data:
+        lang_var.set(str(data["lang"]))
+    if "mux" in data:
+        mux_var.set(_bool_value(data["mux"]))
+    if "set_default" in data:
+        set_default_var.set(_bool_value(data["set_default"]))
+    if "keep_original" in data:
+        keep_original_var.set(_bool_value(data["keep_original"]))
+    if "delay_ms" in data:
+        audio_delay_var.set(str(data["delay_ms"]))
+    if "volume_db" in data:
+        volume_boost_var.set(str(data["volume_db"]))
+    if "stretch_duration" in data:
+        stretch_duration_var.set(_bool_value(data["stretch_duration"]))
+    if "fast_mode" in data:
+        fast_mode_var.set(_bool_value(data["fast_mode"]))
+
+def _save_settings_to(path):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(_collect_settings(), f, ensure_ascii=False, indent=2)
+        log(f"Settings saved: {path}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save settings:\n{e}")
+
+def _load_settings_from(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _apply_settings(data)
+        log(f"Settings loaded: {path}")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load settings:\n{e}")
+
+def save_default_settings():
+    _save_settings_to(DEFAULT_SETTINGS_PATH)
+
+def load_default_settings():
+    if not os.path.exists(DEFAULT_SETTINGS_PATH):
+        messagebox.showerror("Error", f"Default settings file not found:\n{DEFAULT_SETTINGS_PATH}")
+        return
+    _load_settings_from(DEFAULT_SETTINGS_PATH)
+
+def _load_default_settings_on_startup():
+    if not os.path.exists(DEFAULT_SETTINGS_PATH):
+        return
+    try:
+        with open(DEFAULT_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _apply_settings(data)
+    except Exception:
+        return
+
+def save_settings_as():
+    path = filedialog.asksaveasfilename(
+        title="Save Settings",
+        defaultextension=".json",
+        filetypes=[("JSON Files", "*.json")],
+    )
+    if path:
+        _save_settings_to(path)
+
+def load_settings_from():
+    path = filedialog.askopenfilename(
+        title="Load Settings",
+        filetypes=[("JSON Files", "*.json")],
+    )
+    if path:
+        _load_settings_from(path)
+
+def reset_settings_to_initial():
+    audio_format_var.set("aac")
+    bitrate_var.set(DEFAULT_BITRATE)
+    sample_rate_var.set(str(DEFAULT_SAMPLE_RATE))
+    try:
+        if "Greek (ell)" in languages:
+            lang_var.set("Greek (ell)")
+        else:
+            lang_var.set("English (eng)")
+    except Exception:
+        lang_var.set("English (eng)")
+    mux_var.set(True)
+    set_default_var.set(True)
+    keep_original_var.set(True)
+    audio_delay_var.set("0")
+    volume_boost_var.set("0")
+    stretch_duration_var.set(False)
+    if "fast_mode_var" in globals():
+        fast_mode_var.set(False)
+
 # ================= UI =================
 root = TkinterDnD.Tk()
 root.title("FPS Audio Sync Tool by Gant")
@@ -728,6 +858,8 @@ set_default_var = tk.BooleanVar(value=True)
 keep_original_var = tk.BooleanVar(value=True)
 status_var = tk.StringVar(value="Ready")
 progress_var = tk.DoubleVar(value=0)
+
+_load_default_settings_on_startup()
 
 # Source video row with frame
 tk.Label(root, text="Source Video File").grid(row=0, column=0, sticky="w", padx=5, pady=2)
@@ -800,7 +932,61 @@ languages = [
     "Yiddish (yid)", "Yoruba (yor)", 
     "Zhuang (zha)", "Zulu (zul)"
 ]
-ttk.Combobox(root, textvariable=lang_var, values=languages, state="readonly").grid(row=6, column=1, sticky="w", padx=2)
+lang_search_var = tk.StringVar()
+lang_frame = tk.Frame(root)
+lang_frame.grid(row=6, column=1, sticky="ew", padx=2)
+lang_frame.columnconfigure(0, weight=0)
+lang_frame.columnconfigure(1, weight=1)
+tk.Label(lang_frame, text="Search language:").grid(row=0, column=0, sticky="w", padx=(0, 6))
+lang_search_entry = tk.Entry(lang_frame, textvariable=lang_search_var)
+lang_search_entry.grid(row=0, column=1, sticky="ew")
+cb_lang = ttk.Combobox(lang_frame, textvariable=lang_var, values=languages, state="readonly")
+cb_lang.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+def _update_language_filter(*_):
+    q = (lang_search_var.get() or "").strip().lower()
+    if not q:
+        filtered = languages
+    else:
+        filtered = [x for x in languages if q in x.lower()]
+    cb_lang["values"] = filtered
+    if filtered and lang_var.get() not in filtered:
+        lang_var.set(filtered[0])
+
+lang_search_var.trace_add("write", _update_language_filter)
+_update_language_filter()
+_lang_search = {"buf": "", "after": None}
+def _reset_lang_search():
+    _lang_search["buf"] = ""
+    _lang_search["after"] = None
+def _on_lang_keypress(event):
+    ks = getattr(event, "keysym", "") or ""
+    if ks in {"Up", "Down", "Prior", "Next", "Home", "End", "Left", "Right"}:
+        return
+    if ks == "BackSpace":
+        _lang_search["buf"] = ""
+        return "break"
+    ch = getattr(event, "char", "") or ""
+    if not ch.strip():
+        return
+    _lang_search["buf"] += ch.lower()
+    if _lang_search["after"] is not None:
+        try:
+            root.after_cancel(_lang_search["after"])
+        except Exception:
+            pass
+    _lang_search["after"] = root.after(900, _reset_lang_search)
+    prefix = _lang_search["buf"]
+    for item in languages:
+        if item.lower().startswith(prefix):
+            lang_var.set(item)
+            try:
+                cb_lang.current(languages.index(item))
+            except Exception:
+                cb_lang.set(item)
+            break
+    return "break"
+cb_lang.bind("<KeyPress>", _on_lang_keypress)
 
 # Mux options frame
 mux_frame = tk.Frame(root)
@@ -843,6 +1029,14 @@ btn_start.grid(row=0, column=0, sticky="ew", padx=2)
 
 btn_stop = ttk.Button(btn_frame, text="Stop Processing", command=stop_processing, state="disabled")
 btn_stop.grid(row=0, column=1, sticky="ew", padx=2)
+
+settings_frame = tk.Frame(btn_frame)
+settings_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+ttk.Button(settings_frame, text="Save Default", command=save_default_settings).pack(side="left", padx=2)
+ttk.Button(settings_frame, text="Load Default", command=load_default_settings).pack(side="left", padx=2)
+ttk.Button(settings_frame, text="Save...", command=save_settings_as).pack(side="left", padx=2)
+ttk.Button(settings_frame, text="Load...", command=load_settings_from).pack(side="left", padx=2)
+ttk.Button(settings_frame, text="Reset", command=reset_settings_to_initial).pack(side="left", padx=2)
 
 # Status and Progress
 tk.Label(root, textvariable=status_var).grid(row=10, column=0, columnspan=3, sticky="w", padx=5)
