@@ -35,3 +35,4 @@ Requires <b>ffmpeg.exe</b> and <b>ffprobe.exe</b> in root folder.
 You can use this command to compile it to exe file:
 python -m PyInstaller --onefile --windowed --clean --add-binary "ffmpeg.exe;." --add-binary "ffprobe.exe;." --hidden-import=tkinterdnd2 fps_audio_sync_ui.py
 
+![Screenshot_1](https://github.com/user-attachments/assets/8840aa73-a7a8-4641-9a45-7c3db4817254)
