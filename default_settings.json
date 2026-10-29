@@ -1,0 +1,14 @@
+{
+  "audio_format": "aac",
+  "bitrate": "192k",
+  "sample_rate": "48000",
+  "lang": "Greek (ell)",
+  "mux": true,
+  "set_default": true,
+  "keep_original": true,
+  "delay_ms": "0",
+  "volume_db": "0",
+  "stretch_duration": false,
+  "fast_mode": false,
+  "ui_language": "en"
+}

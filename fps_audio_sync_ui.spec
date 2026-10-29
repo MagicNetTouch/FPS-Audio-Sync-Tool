@@ -1,11 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
+APP_VERSION = "2.5"
+APP_NAME = f"FPS Audio Sync Tool v{APP_VERSION}"
+APP_ICON = os.path.join("assets", "app_icon.ico")
 
 
 a = Analysis(
     ['fps_audio_sync_ui.py'],
     pathex=[],
-    binaries=[('ffmpeg.exe', '.'), ('ffprobe.exe', '.')],
-    datas=[],
+    binaries=[],
+    datas=[(APP_ICON, 'assets')],
     hiddenimports=['tkinterdnd2'],
     hookspath=[],
     hooksconfig={},
@@ -22,7 +27,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='fps_audio_sync_ui',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,4 +40,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=APP_ICON,
 )

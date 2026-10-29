@@ -1,0 +1,56 @@
+2.5
+	Added English and Greek interface language support with a live language selector
+	Saved the selected interface language in default and custom settings profiles
+	Added an event-log scrollbar that appears automatically when the log is full
+	Standardized top and bottom spacing across all form fields
+	Increased localized button widths and verified both languages at the minimum window size
+
+2.4
+	Fixed processing not starting reliably after the first run
+	Fixed Start/Stop state handling and cancellation race conditions
+	Fixed unsafe background-thread UI updates
+	Improved FFmpeg process termination when Stop is pressed
+	Added input validation so invalid values do not leave Start disabled
+	Centered the application window on startup
+	Hidden FFmpeg and FFprobe console windows completely
+	Added source and target file loading status messages
+	Added selectable output video file path with automatic naming
+	Added all output audio languages to generated video filenames (for example, _EN-GR.mkv)
+	Redesigned the application with a modern black theme
+	Added rounded buttons with shadows, hover feedback, and pressed states
+	Removed FFmpeg and FFprobe from the packaged executable to reduce its size
+	Added external tool discovery in the tools folder with application-folder fallback
+	Fixed mixed slash directions in automatically generated Windows output paths
+	Added a native Windows dark title bar with matching caption and border colors
+	Reduced control sizes, spacing, and minimum window dimensions for a compact layout
+	Removed light corner artifacts from dark-theme text fields and dropdowns
+
+2.3
+	Added audio language search
+	Added profile save/load
+
+2.2
+	Added better compatibility on audio track language metadata writing on output video
+	Added option to keep or not original audio tracks
+	Added ability to volume boost source's specific audio track without the need of whole process and target video
+
+2.1
+	Added Volume Boost
+
+2.0
+	Added opus audio format
+
+1.9
+	Added Sopt Process button
+	Added Total time elapsed
+	Added avg_frame_rate for more accurent FPS detection
+
+1.8
+	Added Elapsed time and remaning time
+
+1.7
+	Optimizing Audio Encoding
+		I have implemented the "Fast Mode" which simply resamples audio instead of time-stretching, offering a significant speed boost at the cost of pitch shift. I also added support for filter multi-threading.
+
+1.6
+	I have optimized the audio encoding process. It now uses a single FFmpeg pass with multi-threading, which should significantly improve speed and resource usage. I've also verified the changes and updated the documentation.
