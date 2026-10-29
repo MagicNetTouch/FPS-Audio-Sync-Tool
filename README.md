@@ -4,8 +4,7 @@ A Windows utility for synchronizing audio between videos with different frame
 rates or durations. It can also process a selected audio track without a target
 video, adjust its volume or delay, and mux it back into the source video.
 
-![FPS Audio Sync Tool](<img width="803" height="695" alt="εικόνα" src="https://github.com/user-attachments/assets/56bc1e9c-0aee-4367-b463-10d9be7b2fed" />
-)
+<img width="803" height="695" alt="εικόνα" src="https://github.com/user-attachments/assets/56bc1e9c-0aee-4367-b463-10d9be7b2fed" />
 
 ## Features
 
